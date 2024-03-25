@@ -1,6 +1,7 @@
 package clickhouse
 
 import (
+	"crypto/tls"
 	"database/sql"
 	"fmt"
 	"regexp"
@@ -32,6 +33,7 @@ type Config struct {
 
 	ReadIgnoreLabel string
 	ReadIgnoreHints bool
+	TLS             bool
 
 	Debug bool
 }
@@ -41,7 +43,7 @@ func NewClickHouseAdapter(config *Config) (*ClickHouseAdapter, error) {
 		return nil, fmt.Errorf("invalid table name: use non-quoted identifier")
 	}
 
-	db := clickhouse.OpenDB(&clickhouse.Options{
+	dbConfig := &clickhouse.Options{
 		Addr: []string{config.Address},
 		Auth: clickhouse.Auth{
 			Database: config.Database,
@@ -50,10 +52,22 @@ func NewClickHouseAdapter(config *Config) (*ClickHouseAdapter, error) {
 		},
 		Debug:       config.Debug,
 		DialTimeout: 5 * time.Second,
+
 		//MaxOpenConns:    16,
 		//MaxIdleConns:    1,
 		//ConnMaxLifetime: time.Hour,
-	})
+	}
+
+	if !config.TLS {
+		dbConfig.TLS = nil
+	} else {
+		dbConfig.TLS = &tls.Config{
+			InsecureSkipVerify: true,
+		}
+	}
+
+	db := clickhouse.OpenDB(dbConfig)
+
 	db.SetMaxOpenConns(16)
 	db.SetMaxIdleConns(1)
 	db.SetConnMaxLifetime(time.Hour)
