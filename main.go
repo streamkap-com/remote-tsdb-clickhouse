@@ -22,6 +22,11 @@ var (
 			Name: "samples_written_total",
 			Help: "number of samples written into clickhouse",
 		})
+	samplesDroppedStaleTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "samples_dropped_stale_total",
+			Help: "number of Prometheus staleness-marker samples (NaN with the staleness bit pattern) dropped on the write path",
+		})
 	writeRequestsTotal = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Name: "write_requests_total",
@@ -46,6 +51,7 @@ var (
 
 func init() {
 	prometheus.MustRegister(samplesWrittenTotal)
+	prometheus.MustRegister(samplesDroppedStaleTotal)
 	prometheus.MustRegister(writeRequestsTotal)
 	prometheus.MustRegister(writeErrorsTotal)
 	prometheus.MustRegister(readRequestsTotal)
@@ -134,13 +140,18 @@ func main() {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if count, err := ch.WriteRequest(r.Context(), req); err != nil {
+		written, droppedStale, err := ch.WriteRequest(r.Context(), req)
+		if err != nil {
 			writeErrorsTotal.Inc()
 			logger.Error("WriteRequest", zap.Error(err))
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
-		} else if count > 0 {
-			samplesWrittenTotal.Add(float64(count))
+		}
+		if written > 0 {
+			samplesWrittenTotal.Add(float64(written))
+		}
+		if droppedStale > 0 {
+			samplesDroppedStaleTotal.Add(float64(droppedStale))
 		}
 	})
 
