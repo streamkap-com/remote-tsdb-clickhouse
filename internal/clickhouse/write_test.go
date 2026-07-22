@@ -7,26 +7,28 @@ import (
 	"github.com/prometheus/prometheus/model/value"
 )
 
-// Documents the contract we depend on: only Prometheus's staleness-marker NaN
-// is treated as stale. A regular math.NaN() (e.g. division-by-zero from an
-// exporter) is NOT stale and should still be written through so that broken
-// exporters remain visible in ClickHouse instead of being silently swallowed.
-func TestStaleNaNDetection(t *testing.T) {
+// Documents the contract the write path depends on (v0.1.4): ALL NaN is
+// dropped - both the Prometheus staleness-marker bit pattern AND a generic
+// math.NaN() from an exporter. A Float64 NaN stores as NULL in ClickHouse and
+// is operationally useless; for the stateset metric kafka_connect_connector_status
+// the generic-NaN "inactive state" mirror rows are what poison anyLast in
+// all_time_anyLast_metrics (see docs/sre/alerts-report/2026-05-08-skap-alerts-silent-failures.md).
+// This flips the deliberately-narrow v0.1.3 contract, which preserved generic NaN.
+func TestNaNDetection(t *testing.T) {
 	staleSample := math.Float64frombits(value.StaleNaN)
 
-	if !value.IsStaleNaN(staleSample) {
-		t.Fatalf("Prometheus StaleNaN bit pattern (%#x) must be detected as a staleness marker", value.StaleNaN)
+	if !math.IsNaN(staleSample) {
+		t.Fatalf("Prometheus StaleNaN bit pattern (%#x) must be dropped as NaN", value.StaleNaN)
 	}
 
-	if value.IsStaleNaN(math.NaN()) {
-		t.Fatalf("generic math.NaN() must NOT be treated as a staleness marker; " +
-			"only the Prometheus-specific bit pattern is the stale sentinel")
+	if !math.IsNaN(math.NaN()) {
+		t.Fatalf("generic math.NaN() must be dropped as NaN (v0.1.4 contract flip)")
 	}
 
-	if value.IsStaleNaN(1.0) {
-		t.Fatalf("ordinary values must not be treated as stale")
+	if math.IsNaN(1.0) {
+		t.Fatalf("ordinary values must not be treated as NaN")
 	}
-	if value.IsStaleNaN(0.0) {
-		t.Fatalf("zero must not be treated as stale")
+	if math.IsNaN(0.0) {
+		t.Fatalf("zero must not be treated as NaN")
 	}
 }

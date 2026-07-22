@@ -3,18 +3,23 @@ package clickhouse
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
-	"github.com/prometheus/prometheus/model/value"
 	"github.com/prometheus/prometheus/prompb"
 )
 
 // WriteRequest writes Prometheus remote_write samples into ClickHouse.
-// Returns (written, droppedStale, err). droppedStale counts Prometheus
-// staleness markers (NaN with the bit pattern 0x7ff0000000000002) that
-// were skipped because they signal "this series ended", not real data.
-// Letting them through produces NULL rows in metrics_* that poison
-// anyLast() aggregations in the all_time_* materialized views.
+// Returns (written, droppedNaN, err). droppedNaN counts ALL NaN samples -
+// both Prometheus staleness markers (bit pattern 0x7ff0000000000002) and
+// generic math.NaN() emitted by exporters as "no value right now". Both
+// serialize as NULL in the metrics_* Float64 column and are operationally
+// useless; more importantly, for the OpenMetrics stateset metric
+// kafka_connect_connector_status the generic-NaN "inactive state" mirror
+// rows collapse into the same anyLast bucket (status is not in the MV key)
+// and poison anyLast() in the all_time_* materialized views, producing the
+// stale connector_status false positives/negatives. See
+// docs/sre/alerts-report/2026-05-08-skap-alerts-silent-failures.md.
 func (ch *ClickHouseAdapter) WriteRequest(ctx context.Context, req *prompb.WriteRequest) (int, int, error) {
 	commitDone := false
 
@@ -36,7 +41,7 @@ func (ch *ClickHouseAdapter) WriteRequest(ctx context.Context, req *prompb.Write
 	defer stmt.Close()
 
 	written := 0
-	droppedStale := 0
+	droppedNaN := 0
 
 	for _, t := range req.Timeseries {
 		var name string
@@ -51,8 +56,8 @@ func (ch *ClickHouseAdapter) WriteRequest(ctx context.Context, req *prompb.Write
 		}
 
 		for _, s := range t.Samples {
-			if value.IsStaleNaN(s.Value) {
-				droppedStale++
+			if math.IsNaN(s.Value) {
+				droppedNaN++
 				continue
 			}
 			_, err = stmt.Exec(
@@ -70,5 +75,5 @@ func (ch *ClickHouseAdapter) WriteRequest(ctx context.Context, req *prompb.Write
 
 	err = tx.Commit()
 	commitDone = true
-	return written, droppedStale, err
+	return written, droppedNaN, err
 }
