@@ -19,8 +19,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o remote-tsdb-clickhouse
 # Start a new stage for the final image
 FROM alpine:latest
 
-# Install any necessary dependencies in the final image
-RUN apk --no-cache add ca-certificates
+# Install any necessary dependencies in the final image; upgrade first so
+# packages the base image shipped unpatched (e.g. zlib) pick up security fixes
+RUN apk upgrade --no-cache && apk --no-cache add ca-certificates
 
 # Copy the built Go binary from the builder stage
 COPY --from=builder /app/remote-tsdb-clickhouse /usr/local/bin/remote-tsdb-clickhouse
