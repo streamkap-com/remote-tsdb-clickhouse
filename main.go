@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/jamessanford/remote-tsdb-clickhouse/internal/clickhouse"
 
@@ -173,7 +174,16 @@ func main() {
 		zap.String("table", table),
 	)
 
-	if err := http.ListenAndServe(httpAddr, nil); err != nil {
+	// WriteTimeout is generous because /read streams the result of a
+	// ClickHouse query that can run for minutes.
+	srv := &http.Server{
+		Addr:              httpAddr,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       time.Minute,
+		WriteTimeout:      5 * time.Minute,
+		IdleTimeout:       2 * time.Minute,
+	}
+	if err := srv.ListenAndServe(); err != nil {
 		logger.Fatal("ListenAndServe", zap.Error(err))
 	}
 }
