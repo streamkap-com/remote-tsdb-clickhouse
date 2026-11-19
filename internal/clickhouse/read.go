@@ -54,6 +54,10 @@ func (ch *ClickHouseAdapter) ReadRequest(ctx context.Context, req *prompb.ReadRe
 			timeField = fmt.Sprintf("toStartOfInterval(updated_at, INTERVAL %d second)", interval)
 		}
 
+		// ch.table is an identifier, which cannot be a bound parameter; it is
+		// validated against clickHouseIdentifier in NewClickHouseAdapter, and
+		// timeField is built from an int. All user input goes through sb.Args().
+		// #nosec G202
 		rows, err := ch.db.QueryContext(ctx, "SELECT metric_name, arraySort(labels) as slb, "+timeField+" AS t, max(value) as max_0 FROM "+ch.table+" WHERE "+sb.Where()+" GROUP BY metric_name, slb, t ORDER BY metric_name, slb, t", sb.Args()...)
 		if err != nil {
 			return nil, err
