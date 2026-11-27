@@ -34,8 +34,17 @@ type Config struct {
 	ReadIgnoreLabel string
 	ReadIgnoreHints bool
 	TLS             bool
+	TLSVerify       bool
 
 	Debug bool
+}
+
+// tlsConfig skips certificate verification unless verify is set; skipping is
+// the historical default so existing deployments keep connecting.
+func tlsConfig(verify bool) *tls.Config {
+	return &tls.Config{
+		InsecureSkipVerify: !verify,
+	}
 }
 
 func NewClickHouseAdapter(config *Config) (*ClickHouseAdapter, error) {
@@ -61,9 +70,7 @@ func NewClickHouseAdapter(config *Config) (*ClickHouseAdapter, error) {
 	if !config.TLS {
 		dbConfig.TLS = nil
 	} else {
-		dbConfig.TLS = &tls.Config{
-			InsecureSkipVerify: true,
-		}
+		dbConfig.TLS = tlsConfig(config.TLSVerify)
 	}
 
 	db := clickhouse.OpenDB(dbConfig)

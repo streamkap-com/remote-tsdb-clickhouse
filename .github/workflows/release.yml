@@ -26,8 +26,10 @@ jobs:
       contents: read
     steps:
       - name: Validate tag
+        env:
+          TAG: ${{ github.event.inputs.tag }}
         run: |
-          tag="${{ github.event.inputs.tag }}"
+          tag="$TAG"
           if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
             echo "::error::Tag must be vMAJOR.MINOR.PATCH[-suffix] (got '$tag')"
             exit 1
@@ -45,8 +47,10 @@ jobs:
       - uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and push
+        env:
+          TAG: ${{ github.event.inputs.tag }}
         run: |
           docker build --push \
-            -t "${ECR_REGISTRY}/${IMAGE_NAME}:${{ github.event.inputs.tag }}" \
+            -t "${ECR_REGISTRY}/${IMAGE_NAME}:${TAG}" \
             -f Dockerfile \
             .
