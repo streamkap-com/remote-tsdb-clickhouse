@@ -9,6 +9,11 @@ Prometheus remote reader (use metrics from ClickHouse directly in Prometheus)
 go install github.com/jamessanford/remote-tsdb-clickhouse@latest
 ```
 
+### ClickHouse TLS
+
+`-tls` connects to ClickHouse over TLS, by default without verifying the server certificate.
+Add `-tls.verify` to verify it; turn this on wherever the endpoint has a valid certificate.
+
 ### Create destination table
 
 Use `clickhouse client` to create this table:
